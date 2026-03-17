@@ -12,6 +12,15 @@ CATEGORIES = {
     'Sports': ['sports', 'football', 'basketball', 'cricket']
 }
 
+FALLBACK_IMAGES = {
+    'World-News':    'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=80',
+    'Technology':    'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=80',
+    'Finance':       'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80',
+    'Health':        'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=1200&q=80',
+    'Entertainment': 'https://images.unsplash.com/photo-1603190287605-e6ade32fa852?w=1200&q=80',
+    'Sports':        'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1200&q=80',
+}
+
 NEWSAPI_CATEGORY_MAP = {
     'World-News': 'general',
     'Technology': 'technology',
@@ -43,7 +52,7 @@ def fetch_articles(category, count=2):
                     'content': article.get('content', ''),
                     'source': article.get('source', {}).get('name', 'Unknown'),
                     'url': article.get('url', ''),
-                    'image': article.get('urlToImage', ''),
+                    'image': article.get('urlToImage') or FALLBACK_IMAGES.get(category, ''),
                     'category': category
                 })
         return articles
