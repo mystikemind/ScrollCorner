@@ -6,13 +6,18 @@ on:
     - cron: '0 */3 * * *'
   workflow_dispatch:  # Allow manual trigger from GitHub UI
 
+permissions:
+  contents: write  # Needed to commit published_urls.json back to repo
+
 jobs:
   publish-news:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,9 +44,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add published_urls.json || true
+          git add published_urls.json
           git diff --staged --quiet || git commit -m "chore: update published URLs tracker [skip ci]"
-          git push || true
+          git push
 
       - name: Upload run log
         if: always()
