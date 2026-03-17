@@ -33,10 +33,14 @@ def publish_post(article):
     """Publish a single article to Blogger."""
     html_body = format_post_html(article)
 
+    labels = [article['category']]
+    if article.get('discover'):
+        labels.append('Discover')
+
     post_data = {
         'title': article['title'],
         'content': html_body,
-        'labels': [article['category']]
+        'labels': labels
     }
 
     headers = {
