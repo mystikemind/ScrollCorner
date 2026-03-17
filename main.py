@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import random
+import re
 from datetime import datetime
 from news_fetcher import fetch_all_categories
 from article_writer import write_all_articles
@@ -19,18 +20,22 @@ DISCOVER_PER_RUN = 3       # How many articles to also tag as "Discover"
 TRACKING_FILE = 'published_urls.json'
 MAX_TRACKED = 1000         # Max URLs to keep in history
 
-def load_published_urls():
-    """Load set of already-published article URLs."""
+def normalize(text):
+    """Normalize a URL or title for dedup comparison."""
+    import re
+    return re.sub(r'[^a-z0-9]', '', text.lower())
+
+def load_published():
+    """Load set of published URLs and title fingerprints."""
     if os.path.exists(TRACKING_FILE):
         with open(TRACKING_FILE) as f:
             return set(json.load(f))
     return set()
 
-def save_published_urls(urls):
-    """Save published URLs, keeping only the most recent MAX_TRACKED."""
-    url_list = list(urls)[-MAX_TRACKED:]
+def save_published(seen):
+    """Save tracking set, capped at MAX_TRACKED."""
     with open(TRACKING_FILE, 'w') as f:
-        json.dump(url_list, f, indent=2)
+        json.dump(list(seen)[-MAX_TRACKED:], f, indent=2)
 
 def check_env_vars():
     """Verify all required environment variables are set."""
@@ -51,32 +56,55 @@ def run_pipeline():
     # Step 1: Check environment
     check_env_vars()
 
-    # Step 2: Load already-published URLs for deduplication
-    published_urls = load_published_urls()
-    print(f'\n🔍 Tracking {len(published_urls)} previously published URLs')
+    # Step 2: Load published fingerprints (URLs + title hashes)
+    published = load_published()
+    print(f'\n🔍 Tracking {len(published)} published fingerprints')
 
     # Step 3: Fetch news
     print('\n📰 Step 1: Fetching latest news...')
     raw_articles = fetch_all_categories(ARTICLES_PER_CATEGORY)
     print(f'✅ Fetched {len(raw_articles)} articles total')
 
-    # Step 4: Deduplicate per category — skip already published, cap at quota
+    # Step 4: Deduplicate per category — by URL, title fingerprint, and fuzzy word overlap
     from collections import defaultdict
     by_category = defaultdict(list)
     for a in raw_articles:
         by_category[a['category']].append(a)
 
+    def title_words(t):
+        stop = {'a','an','the','and','or','in','on','at','to','for','of','with','is','are','as'}
+        return set(w for w in re.sub(r'[^a-z0-9\s]','',t.lower()).split() if w not in stop and len(w)>2)
+
     new_articles = []
     skipped = 0
+    run_title_words = []  # track titles added this run for cross-category dedup
+
     for category, articles in by_category.items():
-        fresh = [a for a in articles if a.get('url') not in published_urls]
-        skipped += len(articles) - len(fresh)
-        capped = fresh[:ARTICLES_PER_CATEGORY]
+        capped = []
+        for a in articles:
+            url_key   = normalize(a.get('url', ''))
+            title_key = normalize(a.get('title', ''))
+            if url_key in published or title_key in published:
+                skipped += 1
+                continue
+            # Fuzzy check against titles already accepted this run
+            words = title_words(a.get('title', ''))
+            is_dupe = any(
+                len(words & tw) / max(len(words | tw), 1) >= 0.45
+                for tw in run_title_words
+            )
+            if is_dupe:
+                skipped += 1
+                continue
+            capped.append(a)
+            run_title_words.append(words)
+            if len(capped) >= ARTICLES_PER_CATEGORY:
+                break
         new_articles.extend(capped)
         print(f'  {category}: {len(capped)}/{ARTICLES_PER_CATEGORY} new articles')
 
     if skipped:
-        print(f'⏭️  Skipped {skipped} already-published articles')
+        print(f'⏭️  Skipped {skipped} duplicate articles')
     print(f'✅ {len(new_articles)} new articles to process')
 
     if not new_articles:
@@ -102,11 +130,13 @@ def run_pipeline():
     print('\n📤 Step 3: Publishing to ScrollCorner...')
     published, failed = publish_all(written_articles)
 
-    # Step 8: Update tracking file with newly published URLs
-    for article in new_articles[:len(published)]:
-        if article.get('url'):
-            published_urls.add(article['url'])
-    save_published_urls(published_urls)
+    # Step 8: Save URL + title fingerprints for all newly processed articles
+    for a in new_articles:
+        if a.get('url'):
+            published.add(normalize(a['url']))
+        if a.get('title'):
+            published.add(normalize(a['title']))
+    save_published(published)
 
     # Step 9: Summary
     print('\n' + '=' * 60)
