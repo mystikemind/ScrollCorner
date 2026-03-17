@@ -90,7 +90,7 @@ def run_pipeline():
             # Fuzzy check against titles already accepted this run
             words = title_words(a.get('title', ''))
             is_dupe = any(
-                len(words & tw) / max(len(words | tw), 1) >= 0.45
+                len(words & tw) / max(len(words | tw), 1) >= 0.30
                 for tw in run_title_words
             )
             if is_dupe:

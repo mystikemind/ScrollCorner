@@ -50,31 +50,37 @@ Write the article now:"""
         'temperature': 0.7
     }
 
-    try:
-        response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
-        data = response.json()
-        body = data['choices'][0]['message']['content'].strip()
+    for attempt in range(3):
+        try:
+            response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+            data = response.json()
+            if 'choices' not in data:
+                raise ValueError(data.get('error', {}).get('message', 'No choices'))
+            body = data['choices'][0]['message']['content'].strip()
 
-        # Generate SEO friendly title
-        title_prompt = f"Create a compelling, SEO-friendly news headline for an article about: {title}. Return ONLY the headline, nothing else. Max 15 words."
-        payload['messages'] = [{'role': 'user', 'content': title_prompt}]
-        payload['max_tokens'] = 50
+            title_prompt = f"Create a compelling, SEO-friendly news headline for an article about: {title}. Return ONLY the headline, nothing else. Max 15 words."
+            payload['messages'] = [{'role': 'user', 'content': title_prompt}]
+            payload['max_tokens'] = 50
 
-        time.sleep(2)
-        title_response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=15)
-        title_data = title_response.json()
-        new_title = title_data['choices'][0]['message']['content'].strip().strip('"')
+            time.sleep(3)
+            title_response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=15)
+            title_data = title_response.json()
+            if 'choices' not in title_data:
+                raise ValueError(title_data.get('error', {}).get('message', 'No choices'))
+            new_title = title_data['choices'][0]['message']['content'].strip().strip('"')
 
-        return {
-            'title': new_title,
-            'body': body,
-            'category': article['category'],
-            'image': article.get('image', ''),
-            'original_url': article.get('url', '')
-        }
-    except Exception as e:
-        print(f'Error rewriting article: {e}')
-        return None
+            return {
+                'title': new_title,
+                'body': body,
+                'category': article['category'],
+                'image': article.get('image', ''),
+                'original_url': article.get('url', '')
+            }
+        except Exception as e:
+            print(f'  Attempt {attempt+1} failed: {e}')
+            if attempt < 2:
+                time.sleep(10)
+    return None
 
 def write_all_articles(raw_articles):
     """Rewrite all fetched articles."""
