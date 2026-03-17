@@ -1,6 +1,7 @@
 import requests
 import os
 import json
+import time
 
 BLOGGER_API_KEY = os.environ.get('BLOGGER_API_KEY')
 BLOG_ID = os.environ.get('BLOG_ID')
@@ -76,6 +77,7 @@ def publish_all(articles):
             published.append(result)
         else:
             failed.append(article)
+        time.sleep(3)
 
     print(f'\n📊 Summary: {len(published)} published, {len(failed)} failed')
     return published, failed

@@ -13,7 +13,7 @@ from article_writer import write_all_articles
 from blogger_publisher import publish_all
 
 # Configuration
-ARTICLES_PER_CATEGORY = 2  # Articles to publish per category per run
+ARTICLES_PER_CATEGORY = 3  # Articles to publish per category per run
 CATEGORIES_PER_RUN = 6     # All 6 categories
 
 def check_env_vars():
