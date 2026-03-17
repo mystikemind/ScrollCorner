@@ -21,6 +21,19 @@ FALLBACK_IMAGES = {
     'Sports':        'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1200&q=80',
 }
 
+BLOCKED_DOMAINS = [
+    'washingtonpost.com', 'nytimes.com', 'wsj.com', 'ft.com',
+    'bloomberg.com', 'businessinsider.com', 'theatlantic.com',
+]
+
+def _safe_image(url, category):
+    """Return fallback image if URL is missing or from a blocked/paywalled domain."""
+    if not url:
+        return FALLBACK_IMAGES.get(category, '')
+    if any(domain in url for domain in BLOCKED_DOMAINS):
+        return FALLBACK_IMAGES.get(category, '')
+    return url
+
 NEWSAPI_CATEGORY_MAP = {
     'World-News': 'general',
     'Technology': 'technology',
@@ -52,7 +65,7 @@ def fetch_articles(category, count=2):
                     'content': article.get('content', ''),
                     'source': article.get('source', {}).get('name', 'Unknown'),
                     'url': article.get('url', ''),
-                    'image': article.get('urlToImage') or FALLBACK_IMAGES.get(category, ''),
+                    'image': _safe_image(article.get('urlToImage'), category),
                     'category': category
                 })
         return articles
