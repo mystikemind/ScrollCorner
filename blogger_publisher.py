@@ -63,26 +63,31 @@ def publish_post(article, token):
         'Content-Type': 'application/json'
     }
 
-    try:
-        response = requests.post(
-            BLOGGER_API_URL,
-            headers=headers,
-            json=post_data,
-            params={'isDraft': False},
-            timeout=15
-        )
+    # Fix ALL-CAPS titles which Blogger rejects
+    post_data['title'] = post_data['title'].title() if post_data['title'].isupper() else post_data['title']
 
-        if response.status_code == 200:
-            data = response.json()
-            print(f'  ✅ Published: {article["title"][:50]}')
-            print(f'     URL: {data.get("url", "N/A")}')
-            return data
-        else:
-            print(f'  ❌ Failed ({response.status_code}): {response.text[:200]}')
+    for attempt in range(3):
+        try:
+            response = requests.post(
+                BLOGGER_API_URL, headers=headers,
+                json=post_data, params={'isDraft': False}, timeout=15
+            )
+            if response.status_code == 200:
+                data = response.json()
+                print(f'  ✅ Published: {article["title"][:50]}')
+                print(f'     URL: {data.get("url", "N/A")}')
+                return data
+            elif response.status_code == 429:
+                wait = 15 * (attempt + 1)
+                print(f'  ⏳ Rate limited, waiting {wait}s...')
+                time.sleep(wait)
+            else:
+                print(f'  ❌ Failed ({response.status_code}): {response.text[:150]}')
+                return None
+        except Exception as e:
+            print(f'  ❌ Error: {e}')
             return None
-    except Exception as e:
-        print(f'  ❌ Error publishing: {e}')
-        return None
+    return None
 
 def publish_all(articles):
     """Publish all written articles to Blogger."""

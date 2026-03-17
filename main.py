@@ -26,10 +26,11 @@ def normalize(text):
     return re.sub(r'[^a-z0-9]', '', text.lower())
 
 def load_published():
-    """Load set of published URLs and title fingerprints."""
+    """Load set of published URL/title fingerprints."""
     if os.path.exists(TRACKING_FILE):
         with open(TRACKING_FILE) as f:
-            return set(json.load(f))
+            data = json.load(f)
+            return set(data) if isinstance(data, list) else set(data.get('seen', []))
     return set()
 
 def save_published(seen):
