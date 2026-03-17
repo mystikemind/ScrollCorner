@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from news_fetcher import fetch_all_categories
 from article_writer import write_all_articles
-from blogger_publisher import publish_all
+from hashnode_publisher import publish_all
 
 # Configuration
 ARTICLES_PER_CATEGORY = 3  # Articles to fetch per category per run
@@ -40,7 +40,7 @@ def save_published(seen):
 
 def check_env_vars():
     """Verify all required environment variables are set."""
-    required = ['GROQ_API_KEY', 'NEWSAPI_KEY', 'BLOG_ID', 'BLOGGER_TOKEN']
+    required = ['GROQ_API_KEY', 'NEWSAPI_KEY', 'HASHNODE_TOKEN', 'HASHNODE_PUBLICATION_ID']
     missing = [var for var in required if not os.environ.get(var)]
     if missing:
         print(f'❌ Missing environment variables: {", ".join(missing)}')
