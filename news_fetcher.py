@@ -43,15 +43,19 @@ NEWSAPI_CATEGORY_MAP = {
     'Sports': 'sports'
 }
 
-def fetch_articles(category, count=2):
-    """Fetch top articles for a given category from NewsAPI."""
+def fetch_articles(category, count=3):
+    """Fetch top articles for a given category from NewsAPI.
+    Fetches a larger pool (FETCH_MULTIPLIER * count) so deduplication
+    still leaves enough articles to meet the per-category quota.
+    """
+    FETCH_MULTIPLIER = 4  # fetch 4x more than needed to absorb duplicates
     newsapi_cat = NEWSAPI_CATEGORY_MAP.get(category, 'general')
     url = 'https://newsapi.org/v2/top-headlines'
     params = {
         'apiKey': NEWSAPI_KEY,
         'category': newsapi_cat,
         'language': 'en',
-        'pageSize': count
+        'pageSize': min(count * FETCH_MULTIPLIER, 100)
     }
     try:
         response = requests.get(url, params=params, timeout=10)

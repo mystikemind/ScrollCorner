@@ -3,11 +3,26 @@ import os
 import json
 import time
 
-BLOGGER_API_KEY = os.environ.get('BLOGGER_API_KEY')
 BLOG_ID = os.environ.get('BLOG_ID')
-BLOGGER_TOKEN = os.environ.get('BLOGGER_TOKEN')  # OAuth token
-
 BLOGGER_API_URL = f'https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts'
+
+def get_valid_token():
+    """Return a fresh OAuth token, refreshing if needed."""
+    refresh_token = os.environ.get('BLOGGER_REFRESH_TOKEN')
+    client_id = os.environ.get('BLOGGER_CLIENT_ID')
+    client_secret = os.environ.get('BLOGGER_CLIENT_SECRET')
+
+    if refresh_token and client_id and client_secret:
+        r = requests.post('https://oauth2.googleapis.com/token', data={
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token'
+        }, timeout=10)
+        if r.status_code == 200:
+            return r.json()['access_token']
+
+    return os.environ.get('BLOGGER_TOKEN')
 
 def format_post_html(article):
     """Format article body as clean HTML for Blogger."""
@@ -29,7 +44,7 @@ def format_post_html(article):
 
     return html
 
-def publish_post(article):
+def publish_post(article, token):
     """Publish a single article to Blogger."""
     html_body = format_post_html(article)
 
@@ -44,7 +59,7 @@ def publish_post(article):
     }
 
     headers = {
-        'Authorization': f'Bearer {BLOGGER_TOKEN}',
+        'Authorization': f'Bearer {token}',
         'Content-Type': 'application/json'
     }
 
@@ -74,9 +89,12 @@ def publish_all(articles):
     published = []
     failed = []
 
+    token = get_valid_token()
+    print(f'🔑 OAuth token refreshed successfully')
+
     for i, article in enumerate(articles):
         print(f'Publishing {i+1}/{len(articles)}: {article["title"][:50]}...')
-        result = publish_post(article)
+        result = publish_post(article, token)
         if result:
             published.append(result)
         else:

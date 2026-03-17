@@ -60,11 +60,23 @@ def run_pipeline():
     raw_articles = fetch_all_categories(ARTICLES_PER_CATEGORY)
     print(f'✅ Fetched {len(raw_articles)} articles total')
 
-    # Step 4: Deduplicate — skip articles already published
-    new_articles = [a for a in raw_articles if a.get('url') not in published_urls]
-    skipped = len(raw_articles) - len(new_articles)
+    # Step 4: Deduplicate per category — skip already published, cap at quota
+    from collections import defaultdict
+    by_category = defaultdict(list)
+    for a in raw_articles:
+        by_category[a['category']].append(a)
+
+    new_articles = []
+    skipped = 0
+    for category, articles in by_category.items():
+        fresh = [a for a in articles if a.get('url') not in published_urls]
+        skipped += len(articles) - len(fresh)
+        capped = fresh[:ARTICLES_PER_CATEGORY]
+        new_articles.extend(capped)
+        print(f'  {category}: {len(capped)}/{ARTICLES_PER_CATEGORY} new articles')
+
     if skipped:
-        print(f'⏭️  Skipped {skipped} duplicate articles')
+        print(f'⏭️  Skipped {skipped} already-published articles')
     print(f'✅ {len(new_articles)} new articles to process')
 
     if not new_articles:

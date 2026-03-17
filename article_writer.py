@@ -1,6 +1,7 @@
 import requests
 import os
 import json
+import time
 
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -59,6 +60,7 @@ Write the article now:"""
         payload['messages'] = [{'role': 'user', 'content': title_prompt}]
         payload['max_tokens'] = 50
 
+        time.sleep(2)
         title_response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=15)
         title_data = title_response.json()
         new_title = title_data['choices'][0]['message']['content'].strip().strip('"')
