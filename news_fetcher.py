@@ -7,7 +7,7 @@ CATEGORIES = {
     'World-News': ['world', 'international', 'global'],
     'Technology': ['technology', 'tech', 'ai', 'software'],
     'Finance': ['business', 'finance', 'economy', 'markets'],
-    'Health': ['health', 'medical', 'wellness'],
+    'Science': ['science', 'space', 'research', 'discovery'],
     'Entertainment': ['entertainment', 'celebrity', 'movies', 'music'],
     'Sports': ['sports', 'football', 'basketball', 'cricket']
 }
@@ -16,7 +16,7 @@ FALLBACK_IMAGES = {
     'World-News':    'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=80',
     'Technology':    'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=80',
     'Finance':       'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80',
-    'Health':        'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=1200&q=80',
+    'Science':       'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=1200&q=80',
     'Entertainment': 'https://images.unsplash.com/photo-1603190287605-e6ade32fa852?w=1200&q=80',
     'Sports':        'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1200&q=80',
 }
@@ -38,7 +38,7 @@ NEWSAPI_CATEGORY_MAP = {
     'World-News': 'general',
     'Technology': 'technology',
     'Finance': 'business',
-    'Health': 'health',
+    'Science': 'science',
     'Entertainment': 'entertainment',
     'Sports': 'sports'
 }
