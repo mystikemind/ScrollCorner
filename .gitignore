@@ -1,0 +1,22 @@
+# Sensitive files - NEVER commit these
+credentials.json
+token.pickle
+token_data.json
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Logs
+*.log
+last_run.json
+
+# OS
+.DS_Store
+Thumbs.db

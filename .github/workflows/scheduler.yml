@@ -1,0 +1,43 @@
+name: ScrollCorner Auto Publisher
+
+on:
+  schedule:
+    # Runs every 6 hours: 12am, 6am, 12pm, 6pm UTC
+    - cron: '0 0,6,12,18 * * *'
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  publish-news:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run news pipeline
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          BLOG_ID: ${{ secrets.BLOG_ID }}
+          BLOGGER_TOKEN: ${{ secrets.BLOGGER_TOKEN }}
+          BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
+          BLOGGER_CLIENT_ID: ${{ secrets.BLOGGER_CLIENT_ID }}
+          BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
+        run: |
+          python main.py
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pipeline-log-${{ github.run_number }}
+          path: last_run.json
