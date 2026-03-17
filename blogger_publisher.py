@@ -21,6 +21,12 @@ def get_valid_token():
         }, timeout=10)
         if r.status_code == 200:
             return r.json()['access_token']
+        else:
+            print(f'  ⚠️  Token refresh failed ({r.status_code}): {r.text[:200]}')
+    else:
+        missing = [k for k, v in {'BLOGGER_REFRESH_TOKEN': refresh_token, 'BLOGGER_CLIENT_ID': client_id, 'BLOGGER_CLIENT_SECRET': client_secret}.items() if not v]
+        if missing:
+            print(f'  ⚠️  Missing OAuth secrets: {missing} — falling back to static token')
 
     return os.environ.get('BLOGGER_TOKEN')
 

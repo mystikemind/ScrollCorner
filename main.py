@@ -129,7 +129,7 @@ def run_pipeline():
 
     # Step 7: Publish to Blogger
     print('\n📤 Step 3: Publishing to ScrollCorner...')
-    published, failed = publish_all(written_articles)
+    pub_results, failed = publish_all(written_articles)
 
     # Step 8: Save URL + title fingerprints for all newly processed articles
     for a in new_articles:
@@ -143,7 +143,7 @@ def run_pipeline():
     print('\n' + '=' * 60)
     print('📊 PIPELINE COMPLETE')
     print('=' * 60)
-    print(f'✅ Published: {len(published)} articles')
+    print(f'✅ Published: {len(pub_results)} articles')
     print(f'❌ Failed:    {len(failed)} articles')
     print(f'⏰ Finished:  {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
     print('=' * 60)
@@ -154,13 +154,13 @@ def run_pipeline():
         'fetched': len(raw_articles),
         'skipped_duplicates': skipped,
         'written': len(written_articles),
-        'published': len(published),
+        'published': len(pub_results),
         'failed': len(failed)
     }
     with open('last_run.json', 'w') as f:
         json.dump(log, f, indent=2)
 
-    return len(published) > 0
+    return len(pub_results) > 0
 
 if __name__ == '__main__':
     success = run_pipeline()
