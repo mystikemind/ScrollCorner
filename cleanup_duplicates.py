@@ -1,15 +1,17 @@
 """
 One-time script to remove duplicate posts from the Blogger site.
-Keeps the most recent post when duplicates are found (same title).
+Uses fuzzy title matching to catch AI-rewritten variants of the same article.
+Keeps the most recent post when duplicates are found.
 """
 import requests
 import os
-import json
+import re
 import time
 from collections import defaultdict
 
 BLOG_ID = os.environ.get('BLOG_ID')
 BLOGGER_TOKEN = os.environ.get('BLOGGER_TOKEN')
+SIMILARITY_THRESHOLD = 0.4  # Jaccard word overlap to consider titles duplicates
 
 def get_all_posts():
     """Fetch all posts from the blog."""
@@ -33,8 +35,6 @@ def get_all_posts():
 
         batch = data.get('items', [])
         posts.extend(batch)
-        print(f'  Fetched {len(posts)} posts so far...')
-
         page_token = data.get('nextPageToken')
         if not page_token:
             break
@@ -43,16 +43,45 @@ def get_all_posts():
     print(f'✅ Total posts fetched: {len(posts)}')
     return posts
 
-def find_duplicates(posts):
-    """Group posts by normalized title and find duplicates."""
-    title_map = defaultdict(list)
-    for post in posts:
-        # Normalize title: lowercase and strip whitespace
-        key = post['title'].lower().strip()
-        title_map[key].append(post)
+def title_words(title):
+    """Extract meaningful words from a title for comparison."""
+    # Remove punctuation, lowercase, split
+    words = re.sub(r'[^a-z0-9\s]', '', title.lower()).split()
+    # Remove common stop words
+    stopwords = {'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to',
+                 'for', 'of', 'with', 'as', 'is', 'are', 'was', 'were', 'be'}
+    return set(w for w in words if w not in stopwords and len(w) > 2)
 
-    duplicates = {k: v for k, v in title_map.items() if len(v) > 1}
-    return duplicates
+def jaccard_similarity(set1, set2):
+    """Compute Jaccard similarity between two word sets."""
+    if not set1 or not set2:
+        return 0.0
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+    return intersection / union
+
+def find_duplicates(posts):
+    """Group posts by fuzzy title similarity."""
+    groups = []
+    assigned = set()
+
+    for i, post in enumerate(posts):
+        if i in assigned:
+            continue
+        group = [post]
+        words_i = title_words(post['title'])
+        for j, other in enumerate(posts):
+            if j <= i or j in assigned:
+                continue
+            words_j = title_words(other['title'])
+            if jaccard_similarity(words_i, words_j) >= SIMILARITY_THRESHOLD:
+                group.append(other)
+                assigned.add(j)
+        if len(group) > 1:
+            assigned.add(i)
+            groups.append(group)
+
+    return groups
 
 def delete_post(post_id):
     """Delete a single post by ID."""
@@ -63,32 +92,32 @@ def delete_post(post_id):
 
 def cleanup():
     posts = get_all_posts()
-    duplicates = find_duplicates(posts)
+    duplicate_groups = find_duplicates(posts)
 
-    if not duplicates:
+    if not duplicate_groups:
         print('\n✅ No duplicates found!')
         return
 
-    total_dupes = sum(len(v) - 1 for v in duplicates.values())
-    print(f'\n🔍 Found {len(duplicates)} duplicate groups ({total_dupes} posts to delete)')
+    total_dupes = sum(len(g) - 1 for g in duplicate_groups)
+    print(f'\n🔍 Found {len(duplicate_groups)} duplicate groups ({total_dupes} posts to delete)')
     print('-' * 60)
 
     deleted = 0
-    for title, group in duplicates.items():
-        # Sort by published date descending — keep the newest, delete the rest
+    for group in duplicate_groups:
+        # Keep newest, delete the rest
         group.sort(key=lambda x: x['published'], reverse=True)
         keep = group[0]
         to_delete = group[1:]
 
-        print(f'\n📌 Keeping:  [{keep["published"][:10]}] {keep["title"][:60]}')
+        print(f'\n📌 Keeping:  [{keep["published"][:16]}] {keep["title"][:65]}')
         for post in to_delete:
-            print(f'  🗑️  Deleting: [{post["published"][:10]}] {post["title"][:60]}')
+            print(f'  🗑️  Deleting: [{post["published"][:16]}] {post["title"][:65]}')
             if delete_post(post['id']):
                 print(f'     ✅ Deleted')
                 deleted += 1
             else:
                 print(f'     ❌ Failed to delete {post["id"]}')
-            time.sleep(2)  # Avoid rate limits
+            time.sleep(2)
 
     print(f'\n{"=" * 60}')
     print(f'✅ Cleanup complete: {deleted}/{total_dupes} duplicates removed')
