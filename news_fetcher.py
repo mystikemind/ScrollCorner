@@ -17,6 +17,8 @@ FALLBACK_IMAGES = {
 BLOCKED_DOMAINS = [
     'washingtonpost.com', 'nytimes.com', 'wsj.com', 'ft.com',
     'bloomberg.com', 'businessinsider.com', 'theatlantic.com',
+    'usatoday.com', 'gannett-cdn.com', 'gcdn.co', 'media.cnn.com',
+    'static01.nyt.com', 'i.insider.com', 'fortune.com',
 ]
 
 # BBC RSS feeds — free, no API key, accurate categories
