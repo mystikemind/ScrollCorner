@@ -22,15 +22,23 @@ BLOCKED_DOMAINS = [
     's.yimg.com', 'media.zenfs.com', 'images.axios.com',
 ]
 
-# BBC RSS feeds — free, no API key, accurate categories
+# Primary RSS feeds per category
 RSS_FEEDS = {
-    'World-News':    'https://feeds.bbci.co.uk/news/world/rss.xml',
     'Technology':    'https://feeds.bbci.co.uk/news/technology/rss.xml',
     'Finance':       'https://feeds.bbci.co.uk/news/business/rss.xml',
     'Science':       'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',
     'Entertainment': 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
     'Sports':        'https://feeds.bbci.co.uk/news/sport/rss.xml',
 }
+
+# World-News: multiple international outlets for global coverage
+WORLD_NEWS_FEEDS = [
+    'https://feeds.bbci.co.uk/news/world/rss.xml',           # BBC World
+    'https://www.aljazeera.com/xml/rss/all.xml',              # Al Jazeera
+    'https://rss.dw.com/rdf/rss-en-world',                    # Deutsche Welle
+    'https://feeds.reuters.com/reuters/worldNews',             # Reuters World
+    'https://www.theguardian.com/world/rss',                   # The Guardian
+]
 
 NEWSAPI_CATEGORY_MAP = {
     'World-News': 'general',
@@ -107,14 +115,13 @@ def _safe_image(url, category):
         return FALLBACK_IMAGES.get(category, '')
     return url
 
-def fetch_from_rss(category, count=12):
-    feed_url = RSS_FEEDS.get(category)
-    if not feed_url:
-        return []
+def _parse_rss(feed_url, category, count=12):
+    """Parse a single RSS feed and return articles."""
     try:
         r = requests.get(feed_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         root = ET.fromstring(r.content)
         ns = {'media': 'http://search.yahoo.com/mrss/'}
+        source_name = root.findtext('.//channel/title') or feed_url.split('/')[2]
         articles = []
         for item in root.findall('.//item'):
             title = item.findtext('title', '').strip()
@@ -126,16 +133,32 @@ def fetch_from_rss(category, count=12):
             image = thumb.get('url', '') if thumb is not None else ''
             articles.append({
                 'title': title, 'description': desc, 'content': desc,
-                'source': 'BBC News', 'url': url,
-                'image': image or FALLBACK_IMAGES.get(category, ''),
+                'source': source_name, 'url': url,
+                'image': _safe_image(image, category),
                 'category': category
             })
             if len(articles) >= count:
                 break
         return articles
     except Exception as e:
-        print(f'  RSS error {category}: {e}')
+        print(f'  RSS error {feed_url[:40]}: {e}')
         return []
+
+def fetch_from_rss(category, count=12):
+    if category == 'World-News':
+        articles = []
+        seen = set()
+        per_feed = max(6, count // len(WORLD_NEWS_FEEDS) + 2)
+        for feed_url in WORLD_NEWS_FEEDS:
+            for a in _parse_rss(feed_url, category, per_feed):
+                if a['url'] not in seen:
+                    seen.add(a['url'])
+                    articles.append(a)
+        return articles
+    feed_url = RSS_FEEDS.get(category)
+    if not feed_url:
+        return []
+    return _parse_rss(feed_url, category, count)
 
 def fetch_from_newsapi(category, count=12):
     if not NEWSAPI_KEY:
@@ -180,9 +203,11 @@ def fetch_articles(category, count=3):
         print(f'  Rejected {rejected} off-category articles from {category}')
     return pool
 
+ALL_CATEGORIES = ['World-News', 'Technology', 'Finance', 'Science', 'Entertainment', 'Sports']
+
 def fetch_all_categories(articles_per_category=3):
     all_articles = []
-    for category in RSS_FEEDS.keys():
+    for category in ALL_CATEGORIES:
         print(f'Fetching {category}...')
         articles = fetch_articles(category, articles_per_category)
         all_articles.extend(articles)
