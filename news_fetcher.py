@@ -108,12 +108,24 @@ def _matches_category(article, category):
         return False
     return True
 
+def _upgrade_image_url(url):
+    """Upgrade known CDN image URLs to high resolution."""
+    if not url:
+        return url
+    # BBC: /news/240/ or /ace/standard/240/ → 1024
+    url = re.sub(r'(ichef\.bbci\.co\.uk/(?:news|ace/standard))/\d+/', r'\1/1024/', url)
+    # Al Jazeera: resize param
+    url = re.sub(r'(resize=)\d+%2C\d+', r'\1width=1200', url)
+    # Generic width param upgrades
+    url = re.sub(r'[?&]w=\d+', lambda m: m.group(0).split('=')[0] + '=1200', url)
+    return url
+
 def _safe_image(url, category):
     if not url:
         return FALLBACK_IMAGES.get(category, '')
     if any(d in url for d in BLOCKED_DOMAINS):
         return FALLBACK_IMAGES.get(category, '')
-    return url
+    return _upgrade_image_url(url)
 
 def _parse_rss(feed_url, category, count=12):
     """Parse a single RSS feed and return articles."""
@@ -129,8 +141,18 @@ def _parse_rss(feed_url, category, count=12):
             url   = item.findtext('link', '').strip()
             if not title or not desc or not url:
                 continue
-            thumb = item.find('media:thumbnail', ns)
-            image = thumb.get('url', '') if thumb is not None else ''
+            # Prefer media:content (higher res) over media:thumbnail
+            media_content = item.find('media:content', ns)
+            media_thumb = item.find('media:thumbnail', ns)
+            enclosure = item.find('enclosure')
+            if media_content is not None and media_content.get('url'):
+                image = media_content.get('url', '')
+            elif media_thumb is not None and media_thumb.get('url'):
+                image = media_thumb.get('url', '')
+            elif enclosure is not None and enclosure.get('url', '').startswith('http'):
+                image = enclosure.get('url', '')
+            else:
+                image = ''
             articles.append({
                 'title': title, 'description': desc, 'content': desc,
                 'source': source_name, 'url': url,
