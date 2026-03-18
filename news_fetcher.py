@@ -41,6 +41,65 @@ NEWSAPI_CATEGORY_MAP = {
     'Sports':     'sports'
 }
 
+# Keywords that MUST appear in title/description for each category
+# Articles from NewsAPI 'general' that don't match are rejected
+CATEGORY_KEYWORDS = {
+    'World-News': [
+        'war', 'conflict', 'election', 'president', 'minister', 'government', 'military',
+        'nato', 'un ', 'united nations', 'sanctions', 'treaty', 'diplomacy', 'attack',
+        'killed', 'crisis', 'protest', 'coup', 'troops', 'border', 'refugee', 'nuclear',
+        'missile', 'ukraine', 'russia', 'china', 'iran', 'israel', 'gaza', 'india',
+        'trump', 'biden', 'congress', 'senate', 'court', 'supreme', 'policy', 'tariff',
+    ],
+    'Technology': [
+        'ai', 'artificial intelligence', 'software', 'hardware', 'chip', 'gpu', 'cpu',
+        'apple', 'google', 'microsoft', 'nvidia', 'meta', 'samsung', 'amazon', 'tech',
+        'robot', 'algorithm', 'data', 'cyber', 'hack', 'app', 'startup', 'silicon',
+        'iphone', 'android', 'cloud', 'open source', 'model', 'llm', 'computer',
+    ],
+    'Finance': [
+        'stock', 'market', 'economy', 'gdp', 'inflation', 'bank', 'fed ', 'federal reserve',
+        'interest rate', 'dollar', 'crypto', 'bitcoin', 'investment', 'fund', 'hedge',
+        'revenue', 'earnings', 'profit', 'ipo', 'merger', 'acquisition', 'trade', 'tariff',
+        'debt', 'budget', 'recession', 'tax', 'financial', 'wall street', 'nasdaq',
+    ],
+    'Science': [
+        'research', 'study', 'scientists', 'nasa', 'space', 'planet', 'star', 'climate',
+        'species', 'biology', 'physics', 'chemistry', 'genome', 'dna', 'fossil', 'vaccine',
+        'disease', 'medical', 'health', 'brain', 'ocean', 'ai model', 'experiment',
+        'telescope', 'launch', 'mission', 'probe', 'discovery', 'breakthrough', 'robot',
+    ],
+    'Entertainment': [
+        'movie', 'film', 'music', 'album', 'artist', 'celebrity', 'actor', 'actress',
+        'singer', 'band', 'concert', 'tour', 'oscar', 'emmy', 'grammy', 'award',
+        'netflix', 'disney', 'hbo', 'streaming', 'tv show', 'series', 'season',
+        'box office', 'trailer', 'premiere', 'hollywood', 'pop star', 'rapper',
+    ],
+    'Sports': [
+        'nfl', 'nba', 'mlb', 'nhl', 'soccer', 'football', 'basketball', 'baseball',
+        'tennis', 'golf', 'ufc', 'mma', 'olympic', 'championship', 'league', 'playoffs',
+        'trade', 'draft', 'coach', 'player', 'team', 'game', 'match', 'score', 'win',
+        'season', 'tournament', 'cup', 'title', 'athlete', 'transfer', 'injured',
+    ],
+}
+
+# Keywords that disqualify an article from World-News (too soft/entertainment)
+WORLD_NEWS_REJECT = [
+    'meghan', 'harry', 'royal family', 'kardashian', 'celebrity', 'influencer',
+    'reality tv', 'dating', 'wedding', 'divorce', 'baby', 'pregnant', 'instagram',
+    'tiktok viral', 'trending', 'gossip',
+]
+
+def _matches_category(article, category):
+    """Return True if article title+description matches expected category."""
+    text = (article.get('title', '') + ' ' + article.get('description', '')).lower()
+    keywords = CATEGORY_KEYWORDS.get(category, [])
+    if not any(kw in text for kw in keywords):
+        return False
+    if category == 'World-News' and any(kw in text for kw in WORLD_NEWS_REJECT):
+        return False
+    return True
+
 def _safe_image(url, category):
     if not url:
         return FALLBACK_IMAGES.get(category, '')
@@ -104,13 +163,21 @@ def fetch_from_newsapi(category, count=12):
         return []
 
 def fetch_articles(category, count=3):
-    """Fetch from both NewsAPI and BBC RSS, merge and deduplicate by URL."""
+    """Fetch from BBC RSS + NewsAPI, deduplicate, filter by category keywords."""
     pool = []
     seen_urls = set()
-    for a in fetch_from_newsapi(category, count * 4) + fetch_from_rss(category, count * 4):
-        if a['url'] and a['url'] not in seen_urls:
-            seen_urls.add(a['url'])
-            pool.append(a)
+    rejected = 0
+    # BBC RSS first (most accurate categories), then NewsAPI
+    for a in fetch_from_rss(category, count * 6) + fetch_from_newsapi(category, count * 4):
+        if not a['url'] or a['url'] in seen_urls:
+            continue
+        if not _matches_category(a, category):
+            rejected += 1
+            continue
+        seen_urls.add(a['url'])
+        pool.append(a)
+    if rejected:
+        print(f'  Rejected {rejected} off-category articles from {category}')
     return pool
 
 def fetch_all_categories(articles_per_category=3):
