@@ -1,92 +1,36 @@
-import requests
-import os
-import hashlib
+import re
 import xml.etree.ElementTree as ET
 
 NEWSAPI_KEY = os.environ.get('NEWSAPI_KEY')
 
-# Royalty-free Unsplash image pools per category (10 images each)
-# Used exclusively — no copyrighted CDN images from news sources
-CATEGORY_IMAGE_POOLS = {
-    'World-News': [
-        'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1540910419892-943fd891f4f2?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1508615070457-ec59c23a4d96?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1551649001-1f56b2f99f3e?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1614849963640-d43e4e58d5b8?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1200&q=85&auto=format&fit=crop',
-    ],
-    'Technology': [
-        'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=1200&q=85&auto=format&fit=crop',
-    ],
-    'Finance': [
-        'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1579621970795-87facc2f976d?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1565514020179-026b92b84bb6?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1559526324-593bc073d938?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1444653614127-0958b3adee40?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1502920917128-1aa671855523?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1604594849809-dfedbc827105?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1607944024060-0450380ddd33?w=1200&q=85&auto=format&fit=crop',
-    ],
-    'Science': [
-        'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1576086213369-97a306d36557?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1628595351029-5cef0c6c14d9?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1559757148-5b63f2b5b30d?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1567427017947-545c5f8d16ad?w=1200&q=85&auto=format&fit=crop',
-    ],
-    'Entertainment': [
-        'https://images.unsplash.com/photo-1603190287605-e6ade32fa852?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1598899134739-24c46f58b8c0?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1533488765986-dae5c022b99c?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1567621936010-6e5d84f38bf3?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1561154464-5b60f4cc22cd?w=1200&q=85&auto=format&fit=crop',
-    ],
-    'Sports': [
-        'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1517649763962-0c623066013b?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1556817411-31ae72c054a5?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1526676037019-dac8d39f1730?w=1200&q=85&auto=format&fit=crop',
-        'https://images.unsplash.com/photo-1594381898411-846e7d193883?w=1200&q=85&auto=format&fit=crop',
-    ],
+# Fallback images (Unsplash) used only when source has no image or is from a blocked domain
+FALLBACK_IMAGES = {
+    'World-News':    'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200&q=85',
+    'Technology':    'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=85',
+    'Finance':       'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=85',
+    'Science':       'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=1200&q=85',
+    'Entertainment': 'https://images.unsplash.com/photo-1603190287605-e6ade32fa852?w=1200&q=85',
+    'Sports':        'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1200&q=85',
 }
 
-def _pick_image(category, seed):
-    """Pick a royalty-free image deterministically from the pool using seed (slug/title)."""
-    pool = CATEGORY_IMAGE_POOLS.get(category, CATEGORY_IMAGE_POOLS['World-News'])
-    idx = int(hashlib.md5(seed.encode()).hexdigest(), 16) % len(pool)
-    return pool[idx]
+# Domains that block hotlinking — use Unsplash fallback instead
+BLOCKED_DOMAINS = [
+    'washingtonpost.com', 'nytimes.com', 'wsj.com', 'ft.com',
+    'bloomberg.com', 'businessinsider.com', 'theatlantic.com',
+    'usatoday.com', 'floridatoday.com', 'gannett-cdn.com', 'gcdn.co',
+    'media.cnn.com', 'static01.nyt.com', 'i.insider.com', 'fortune.com',
+    's.yimg.com', 'media.zenfs.com', 'images.axios.com',
+]
+
+def _safe_image(url, category):
+    """Return source image URL upgraded to high-res, or Unsplash fallback if blocked/missing."""
+    if not url:
+        return FALLBACK_IMAGES.get(category, '')
+    if any(d in url for d in BLOCKED_DOMAINS):
+        return FALLBACK_IMAGES.get(category, '')
+    # Upgrade BBC thumbnail URLs to 1024px
+    url = re.sub(r'(ichef\.bbci\.co\.uk/(?:news|ace/standard))/\d+/', r'\1/1024/', url)
+    return url
 
 # Primary RSS feeds per category
 RSS_FEEDS = {
@@ -189,10 +133,24 @@ def _parse_rss(feed_url, category, count=12):
             url   = item.findtext('link', '').strip()
             if not title or not desc or not url:
                 continue
+            # Prefer media:content (higher res) over media:thumbnail, then enclosure
+            media_content = item.find('media:content', ns)
+            media_thumb   = item.find('media:thumbnail', ns)
+            enclosure     = item.find('enclosure')
+            if media_content is not None and media_content.get('url'):
+                raw_image = media_content.get('url', '')
+            elif media_thumb is not None and media_thumb.get('url'):
+                raw_image = media_thumb.get('url', '')
+            elif enclosure is not None and enclosure.get('url', '').startswith('http'):
+                raw_image = enclosure.get('url', '')
+            else:
+                raw_image = ''
+            image = _safe_image(raw_image, category)
             articles.append({
                 'title': title, 'description': desc, 'content': desc,
                 'source': source_name, 'url': url,
-                'image': _pick_image(category, url),
+                'image': image,
+                'image_source': source_name if raw_image and 'unsplash' not in image else '',
                 'category': category
             })
             if len(articles) >= count:
@@ -235,7 +193,8 @@ def fetch_from_newsapi(category, count=12):
                     'content': a.get('content', ''),
                     'source': a.get('source', {}).get('name', 'Unknown'),
                     'url': a.get('url', ''),
-                    'image': _pick_image(category, a.get('url', a.get('title', ''))),
+                    'image': _safe_image(a.get('urlToImage'), category),
+                    'image_source': a.get('source', {}).get('name', '') if a.get('urlToImage') else '',
                     'category': category
                 })
         return articles
