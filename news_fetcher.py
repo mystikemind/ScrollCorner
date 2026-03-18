@@ -28,8 +28,9 @@ def _safe_image(url, category):
         return FALLBACK_IMAGES.get(category, '')
     if any(d in url for d in BLOCKED_DOMAINS):
         return FALLBACK_IMAGES.get(category, '')
-    # Upgrade BBC thumbnail URLs to 1024px
-    url = re.sub(r'(ichef\.bbci\.co\.uk/(?:news|ace/standard))/\d+/', r'\1/1024/', url)
+    # BBC: switch ace/standard (branded/watermarked) to news (clean), upgrade to 1024px
+    url = url.replace('ichef.bbci.co.uk/ace/standard/', 'ichef.bbci.co.uk/news/')
+    url = re.sub(r'(ichef\.bbci\.co\.uk/news)/\d+/', r'\1/1024/', url)
     return url
 
 # Primary RSS feeds per category
