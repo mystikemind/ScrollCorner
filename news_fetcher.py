@@ -28,11 +28,8 @@ def _safe_image(url, category):
         return FALLBACK_IMAGES.get(category, '')
     if any(d in url for d in BLOCKED_DOMAINS):
         return FALLBACK_IMAGES.get(category, '')
-    # BBC ace/standard = InDepth branded images (logo baked into pixels) — skip them
-    if 'ichef.bbci.co.uk/ace/standard/' in url:
-        return FALLBACK_IMAGES.get(category, '')
-    # BBC news path: upgrade to 1024px
-    url = re.sub(r'(ichef\.bbci\.co\.uk/news)/\d+/', r'\1/1024/', url)
+    # BBC: upgrade to 1024px
+    url = re.sub(r'(ichef\.bbci\.co\.uk/(?:news|ace/standard))/\d+/', r'\1/1024/', url)
     return url
 
 # Primary RSS feeds per category
