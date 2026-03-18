@@ -1,7 +1,7 @@
 """
 ScrollCorner Automated News Pipeline
 =====================================
-Fetches news → Rewrites with AI → Publishes to Blogger
+Fetches news → Rewrites with AI → Commits JSON to scrollcorner-site repo → Vercel deploys
 Runs automatically every 3 hours via GitHub Actions
 """
 import os
@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from news_fetcher import fetch_all_categories
 from article_writer import write_all_articles
-from hashnode_publisher import publish_all
+from file_publisher import publish_all
 
 # Configuration
 ARTICLES_PER_CATEGORY = 3  # Articles to fetch per category per run
@@ -40,7 +40,7 @@ def save_published(seen):
 
 def check_env_vars():
     """Verify all required environment variables are set."""
-    required = ['GROQ_API_KEY', 'NEWSAPI_KEY', 'HASHNODE_TOKEN', 'HASHNODE_PUBLICATION_ID']
+    required = ['GROQ_API_KEY', 'NEWSAPI_KEY', 'GITHUB_TOKEN']
     missing = [var for var in required if not os.environ.get(var)]
     if missing:
         print(f'❌ Missing environment variables: {", ".join(missing)}')
@@ -127,7 +127,7 @@ def run_pipeline():
         article['discover'] = True
     print(f'🔎 Tagged {len(discover_picks)} articles for Discover section')
 
-    # Step 7: Publish to Blogger
+    # Step 7: Publish (commit JSON to site repo → Vercel deploys)
     print('\n📤 Step 3: Publishing to ScrollCorner...')
     pub_results, failed = publish_all(written_articles)
 

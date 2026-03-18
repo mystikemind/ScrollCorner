@@ -2,12 +2,11 @@ name: ScrollCorner Auto Publisher
 
 on:
   schedule:
-    # Runs every 3 hours
     - cron: '0 */3 * * *'
-  workflow_dispatch:  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 permissions:
-  contents: write  # Needed to commit published_urls.json back to repo
+  contents: write
 
 jobs:
   publish-news:
@@ -25,17 +24,14 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run news pipeline
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
-          HASHNODE_TOKEN: ${{ secrets.HASHNODE_TOKEN }}
-          HASHNODE_PUBLICATION_ID: ${{ secrets.HASHNODE_PUBLICATION_ID }}
-        run: |
-          python main.py
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: python main.py
 
       - name: Save published URLs tracker
         if: always()
