@@ -60,7 +60,7 @@ def publish_post(article: dict, headers: dict) -> dict | None:
         'image': article.get('image', ''),
         'date': article.get('date', time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())),
         'tags': article.get('labels', [category]),
-        'source_url': article.get('url', ''),
+        'source_url': article.get('original_url', '') or article.get('url', ''),
         'discover': article.get('discover', False),
     }
 
