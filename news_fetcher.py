@@ -153,7 +153,13 @@ def _parse_rss(feed_url, category, count=12):
             # Skip BBC InDepth articles (ace/ path = branded watermark images)
             if 'ichef.bbci.co.uk/ace/' in raw_image:
                 continue
+            # Skip articles with no real image
+            if not raw_image:
+                continue
             image = _safe_image(raw_image, category)
+            # Skip if image resolved to Unsplash fallback (blocked domain etc.)
+            if 'unsplash' in image:
+                continue
             articles.append({
                 'title': title, 'description': desc, 'content': desc,
                 'source': source_name, 'url': url,
@@ -195,16 +201,20 @@ def fetch_from_newsapi(category, count=12):
         }, timeout=10)
         articles = []
         for a in r.json().get('articles', []):
-            if a.get('title') and a.get('description'):
-                articles.append({
-                    'title': a['title'], 'description': a.get('description', ''),
-                    'content': a.get('content', ''),
-                    'source': a.get('source', {}).get('name', 'Unknown'),
-                    'url': a.get('url', ''),
-                    'image': _safe_image(a.get('urlToImage'), category),
-                    'image_source': a.get('source', {}).get('name', '') if a.get('urlToImage') else '',
-                    'category': category
-                })
+            if not (a.get('title') and a.get('description') and a.get('urlToImage')):
+                continue
+            image = _safe_image(a.get('urlToImage'), category)
+            if 'unsplash' in image:
+                continue
+            articles.append({
+                'title': a['title'], 'description': a.get('description', ''),
+                'content': a.get('content', ''),
+                'source': a.get('source', {}).get('name', 'Unknown'),
+                'url': a.get('url', ''),
+                'image': image,
+                'image_source': a.get('source', {}).get('name', ''),
+                'category': category
+            })
         return articles
     except Exception as e:
         print(f'  NewsAPI error {category}: {e}')
