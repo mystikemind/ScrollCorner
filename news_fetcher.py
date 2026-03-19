@@ -30,8 +30,11 @@ def _safe_image(url, category):
         return FALLBACK_IMAGES.get(category, '')
     if any(d in url for d in BLOCKED_DOMAINS):
         return FALLBACK_IMAGES.get(category, '')
-    # BBC: upgrade to 1024px
-    url = re.sub(r'(ichef\.bbci\.co\.uk/(?:news|ace/standard))/\d+/', r'\1/1024/', url)
+    # BBC ace/* = InDepth/branded watermark images → use Unsplash fallback
+    if 'ichef.bbci.co.uk/ace/' in url:
+        return FALLBACK_IMAGES.get(category, '')
+    # BBC news: upgrade to 1024px
+    url = re.sub(r'(ichef\.bbci\.co\.uk/news)/\d+/', r'\1/1024/', url)
     return url
 
 # Primary RSS feeds per category
@@ -147,6 +150,9 @@ def _parse_rss(feed_url, category, count=12):
                 raw_image = enclosure.get('url', '')
             else:
                 raw_image = ''
+            # Skip BBC InDepth articles (ace/ path = branded watermark images)
+            if 'ichef.bbci.co.uk/ace/' in raw_image:
+                continue
             image = _safe_image(raw_image, category)
             articles.append({
                 'title': title, 'description': desc, 'content': desc,
