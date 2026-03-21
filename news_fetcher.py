@@ -106,11 +106,22 @@ CATEGORY_KEYWORDS = {
     ],
 }
 
-# Keywords that disqualify an article from World-News (too soft/entertainment)
+# Keywords that disqualify an article from World-News (entertainment/sports/lifestyle)
 WORLD_NEWS_REJECT = [
+    # Celebrity / lifestyle
     'meghan', 'harry', 'royal family', 'kardashian', 'celebrity', 'influencer',
     'reality tv', 'dating', 'wedding', 'divorce', 'baby', 'pregnant', 'instagram',
     'tiktok viral', 'trending', 'gossip',
+    # Music / entertainment
+    'album', 'new album', 'music video', 'bts', 'k-pop', 'kpop', 'pop star',
+    'rapper', 'singer', 'band', 'concert', 'tour', 'billboard', 'grammy',
+    'oscar', 'emmy', 'box office', 'streaming', 'netflix', 'disney',
+    'movie trailer', 'film premiere', 'hollywood', 'actor', 'actress',
+    # Sports
+    'march madness', 'nba', 'nfl', 'mlb', 'nhl', 'super bowl', 'world series',
+    'playoffs', 'championship game', 'slam dunk', 'touchdown', 'home run',
+    'march madness bracket', 'ncaa', 'college basketball', 'college football',
+    'transfer portal', 'nfl draft', 'nba draft',
 ]
 
 def _matches_category(article, category):
