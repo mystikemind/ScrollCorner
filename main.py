@@ -13,6 +13,7 @@ from datetime import datetime
 from news_fetcher import fetch_all_categories
 from article_writer import write_all_articles
 from file_publisher import publish_all
+from twitter_poster import post_articles
 
 # Configuration
 ARTICLES_PER_CATEGORY = 3  # Articles to fetch per category per run
@@ -139,7 +140,12 @@ def run_pipeline():
             published.add(normalize(a['title']))
     save_published(published)
 
-    # Step 9: Summary
+    # Step 9: Post to Twitter/X
+    if pub_results:
+        print('\n🐦 Step 4: Posting to Twitter/X...')
+        post_articles(written_articles, max_tweets=3)
+
+    # Step 10: Summary
     print('\n' + '=' * 60)
     print('📊 PIPELINE COMPLETE')
     print('=' * 60)
