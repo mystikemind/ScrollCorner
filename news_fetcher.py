@@ -23,6 +23,7 @@ BLOCKED_DOMAINS = [
     'media.cnn.com', 'static01.nyt.com', 'i.insider.com', 'fortune.com',
     's.yimg.com', 'media.zenfs.com', 'images.axios.com',
     'i.guim.co.uk',  # Guardian CDN: RSS images are signed low-res thumbnails (width=140)
+    'bwbx.io', 'assets.bwbx.io',  # Bloomberg CDN: blocks external scrapers
 ]
 
 def _safe_image(url, category):
