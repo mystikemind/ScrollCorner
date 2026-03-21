@@ -22,6 +22,7 @@ BLOCKED_DOMAINS = [
     'usatoday.com', 'floridatoday.com', 'gannett-cdn.com', 'gcdn.co',
     'media.cnn.com', 'static01.nyt.com', 'i.insider.com', 'fortune.com',
     's.yimg.com', 'media.zenfs.com', 'images.axios.com',
+    'i.guim.co.uk',  # Guardian CDN: RSS images are signed low-res thumbnails (width=140)
 ]
 
 def _safe_image(url, category):
@@ -30,8 +31,8 @@ def _safe_image(url, category):
         return FALLBACK_IMAGES.get(category, '')
     if any(d in url for d in BLOCKED_DOMAINS):
         return FALLBACK_IMAGES.get(category, '')
-    # BBC ace/* = InDepth/branded watermark images → use Unsplash fallback
-    if 'ichef.bbci.co.uk/ace/' in url:
+    # BBC ace/* and branded_news/* = watermark/logo baked in → skip
+    if 'ichef.bbci.co.uk/ace/' in url or '/branded_news/' in url:
         return FALLBACK_IMAGES.get(category, '')
     # BBC news: upgrade to 1024px
     url = re.sub(r'(ichef\.bbci\.co\.uk/news)/\d+/', r'\1/1024/', url)
@@ -106,23 +107,34 @@ CATEGORY_KEYWORDS = {
     ],
 }
 
-# Keywords that disqualify an article from World-News (entertainment/sports/lifestyle)
-WORLD_NEWS_REJECT = [
-    # Celebrity / lifestyle
-    'meghan', 'harry', 'royal family', 'kardashian', 'celebrity', 'influencer',
-    'reality tv', 'dating', 'wedding', 'divorce', 'baby', 'pregnant', 'instagram',
-    'tiktok viral', 'trending', 'gossip',
-    # Music / entertainment
-    'album', 'new album', 'music video', 'bts', 'k-pop', 'kpop', 'pop star',
-    'rapper', 'singer', 'band', 'concert', 'tour', 'billboard', 'grammy',
-    'oscar', 'emmy', 'box office', 'streaming', 'netflix', 'disney',
-    'movie trailer', 'film premiere', 'hollywood', 'actor', 'actress',
-    # Sports
-    'march madness', 'nba', 'nfl', 'mlb', 'nhl', 'super bowl', 'world series',
-    'playoffs', 'championship game', 'slam dunk', 'touchdown', 'home run',
-    'march madness bracket', 'ncaa', 'college basketball', 'college football',
-    'transfer portal', 'nfl draft', 'nba draft',
-]
+# Per-category reject lists — articles matching these are dropped from that category
+CATEGORY_REJECT = {
+    'World-News': [
+        # Celebrity / lifestyle
+        'meghan', 'harry', 'royal family', 'kardashian', 'celebrity', 'influencer',
+        'reality tv', 'dating', 'wedding', 'divorce', 'baby', 'pregnant', 'instagram',
+        'tiktok viral', 'trending', 'gossip',
+        # Music / entertainment
+        'album', 'new album', 'music video', 'bts', 'k-pop', 'kpop', 'pop star',
+        'rapper', 'singer', 'band', 'concert', 'tour', 'billboard', 'grammy',
+        'oscar', 'emmy', 'box office', 'streaming', 'netflix', 'disney',
+        'movie trailer', 'film premiere', 'hollywood', 'actor', 'actress',
+        # Sports
+        'march madness', 'nba', 'nfl', 'mlb', 'nhl', 'super bowl', 'world series',
+        'playoffs', 'championship game', 'slam dunk', 'touchdown', 'home run',
+        'ncaa', 'college basketball', 'college football', 'transfer portal',
+        'nfl draft', 'nba draft',
+        # Pure finance/trading (belongs in Finance, not World-News)
+        'forex', 'currency pair', 'trading signal', 'forexfactory', 'pip spread',
+        'ecb decision', 'rate decision analysis', 'technical analysis',
+    ],
+    'Finance': [
+        # Pure tech products that belong in Technology
+        'openai', 'chatgpt', 'claude ai', 'gemini ai', 'llm release', 'ai model launch',
+        'new iphone', 'android release', 'app launch', 'desktop app', 'superapp',
+        'software release', 'operating system update',
+    ],
+}
 
 def _matches_category(article, category):
     """Return True if article title+description matches expected category."""
@@ -130,7 +142,7 @@ def _matches_category(article, category):
     keywords = CATEGORY_KEYWORDS.get(category, [])
     if not any(kw in text for kw in keywords):
         return False
-    if category == 'World-News' and any(kw in text for kw in WORLD_NEWS_REJECT):
+    if any(kw in text for kw in CATEGORY_REJECT.get(category, [])):
         return False
     return True
 
@@ -161,8 +173,8 @@ def _parse_rss(feed_url, category, count=12):
                 raw_image = enclosure.get('url', '')
             else:
                 raw_image = ''
-            # Skip BBC InDepth articles (ace/ path = branded watermark images)
-            if 'ichef.bbci.co.uk/ace/' in raw_image:
+            # Skip BBC branded/watermark images (ace/ = InDepth, branded_news/ = BBC News logo)
+            if 'ichef.bbci.co.uk/ace/' in raw_image or '/branded_news/' in raw_image:
                 continue
             # Skip articles with no real image
             if not raw_image:
