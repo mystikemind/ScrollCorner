@@ -3,6 +3,10 @@ import os
 import re
 import xml.etree.ElementTree as ET
 
+def _kw_match(text, keyword):
+    """Match keyword as whole word(s) in text, avoiding substring false positives."""
+    return bool(re.search(r'\b' + re.escape(keyword) + r'\b', text))
+
 NEWSAPI_KEY = os.environ.get('NEWSAPI_KEY')
 
 # Fallback images (Unsplash) used only when source has no image or is from a blocked domain
@@ -128,6 +132,16 @@ CATEGORY_REJECT = {
         # Pure finance/trading (belongs in Finance, not World-News)
         'forex', 'currency pair', 'trading signal', 'forexfactory', 'pip spread',
         'ecb decision', 'rate decision analysis', 'technical analysis',
+        # Tech products / OS releases (belongs in Technology, not World-News)
+        'tvos', 'ipados', 'watchos', 'visionos', 'macos ',
+        'ios 2', 'ios 1',  # iOS version numbers (ios 26, ios 18, etc.)
+        'apple tv', 'apple watch', 'apple vision pro', 'apple intelligence',
+        'new iphone', 'iphone launch', 'iphone release', 'iphone model', 'iphone 1', 'iphone 2',
+        'android update', 'android release', 'android phone', 'pixel phone',
+        'samsung galaxy', 'samsung phone',
+        'openai', 'chatgpt', 'deepmind', 'gemini ai', 'copilot ai',
+        'app update', 'software update', 'firmware update', 'operating system update',
+        'new features', 'feature update',  # generic product release language
     ],
     'Finance': [
         # Pure tech products that belong in Technology
@@ -137,14 +151,31 @@ CATEGORY_REJECT = {
     ],
 }
 
+# Strong tech title signals — if ANY of these appear in the article TITLE, reject from World-News
+# These are unambiguous product/tech release markers that Al Jazeera's all.xml leaks into world feeds
+TECH_TITLE_SIGNALS = [
+    'ios ', 'tvos', 'ipados', 'watchos', 'macos', 'visionos',
+    'iphone', 'ipad', 'apple watch', 'apple tv', 'apple vision',
+    'android', 'pixel ', 'samsung galaxy',
+    'openai', 'chatgpt', 'gemini', 'deepmind',
+    'new features', 'major update', 'software update', 'firmware',
+    'emoji', 'app store', 'play store',
+]
+
 def _matches_category(article, category):
     """Return True if article title+description matches expected category."""
-    text = (article.get('title', '') + ' ' + article.get('description', '')).lower()
+    title = article.get('title', '').lower()
+    text = (title + ' ' + article.get('description', '')).lower()
     keywords = CATEGORY_KEYWORDS.get(category, [])
-    if not any(kw in text for kw in keywords):
+    if not any(_kw_match(text, kw) for kw in keywords):
         return False
-    if any(kw in text for kw in CATEGORY_REJECT.get(category, [])):
+    if any(_kw_match(text, kw) for kw in CATEGORY_REJECT.get(category, [])):
         return False
+    # For World-News: also reject if the title has clear tech product/release signals
+    # (Al Jazeera all.xml leaks iOS/tvOS/Android release articles into world feeds)
+    if category == 'World-News':
+        if any(sig in title for sig in TECH_TITLE_SIGNALS):
+            return False
     return True
 
 
