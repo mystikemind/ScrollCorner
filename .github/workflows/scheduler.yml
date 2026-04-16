@@ -3,6 +3,7 @@ name: ScrollCorner Auto Publisher
 on:
   schedule:
     - cron: '0 */3 * * *'
+    - cron: '0 2 * * 0'  # Weekly cleanup: every Sunday at 2am UTC
   workflow_dispatch:
 
 permissions:
@@ -52,3 +53,53 @@ jobs:
         with:
           name: pipeline-log-${{ github.run_number }}
           path: last_run.json
+
+  cleanup-old-articles:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * 0'
+
+    steps:
+      - name: Checkout site repo
+        uses: actions/checkout@v4
+        with:
+          repository: mystikemind/scrollcorner-site
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Delete articles older than 7 days
+        run: |
+          python3 - <<'EOF'
+          import os, json
+          from datetime import datetime, timezone, timedelta
+
+          cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+          content_dir = 'content'
+          removed = 0
+
+          for cat in os.listdir(content_dir):
+              cat_dir = os.path.join(content_dir, cat)
+              if not os.path.isdir(cat_dir):
+                  continue
+              for f in os.listdir(cat_dir):
+                  if not f.endswith('.json'):
+                      continue
+                  path = os.path.join(cat_dir, f)
+                  try:
+                      with open(path) as fp:
+                          d = json.load(fp)
+                      date = datetime.fromisoformat(d.get('date', '').replace('Z', '+00:00'))
+                      if date < cutoff:
+                          os.remove(path)
+                          removed += 1
+                  except Exception:
+                      pass
+
+          print(f'Removed {removed} articles older than 7 days')
+          EOF
+
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "chore: remove articles older than 7 days [skip ci]"
+          git push
