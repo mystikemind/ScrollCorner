@@ -1,6 +1,6 @@
 """
 Publishes articles as JSON files to the scrollcorner-site repo via GitHub API.
-Vercel auto-deploys on every push.
+All articles in a run are committed in a single batch commit using the Git Trees API.
 """
 import os
 import re
@@ -32,72 +32,55 @@ def get_headers():
     }
 
 
-def file_exists(path: str, headers: dict):
-    r = requests.get(f'{GITHUB_API}/repos/{REPO}/contents/{path}', headers=headers)
-    if r.status_code == 200:
-        return r.json().get('sha')
-    return None
+def get_existing_slugs(headers: dict) -> set:
+    """Fetch all existing file paths in content/ to skip duplicates."""
+    existing = set()
+    for cat in ['World-News', 'Technology', 'Finance', 'Science', 'Entertainment', 'Sports']:
+        r = requests.get(
+            f'{GITHUB_API}/repos/{REPO}/contents/content/{cat}',
+            headers=headers,
+            timeout=15,
+        )
+        if r.status_code == 200:
+            for f in r.json():
+                existing.add(f['path'])
+    return existing
 
 
-def publish_post(article: dict, headers: dict) -> dict | None:
-    slug = slugify(article['title'])
-    if not slug:
-        return None
+def get_latest_commit_sha(headers: dict) -> str:
+    r = requests.get(
+        f'{GITHUB_API}/repos/{REPO}/git/refs/heads/main',
+        headers=headers,
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()['object']['sha']
 
-    category = article['category']
-    path = f'content/{category}/{slug}.json'
 
-    # Skip if file already exists (dedup)
-    if file_exists(path, headers):
-        print(f'  ⏭️  Already exists: {slug}')
-        return None
+def get_tree_sha(commit_sha: str, headers: dict) -> str:
+    r = requests.get(
+        f'{GITHUB_API}/repos/{REPO}/git/commits/{commit_sha}',
+        headers=headers,
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()['tree']['sha']
 
-    content = {
-        'slug': slug,
-        'title': article['title'],
-        'body': article['body'],
-        'category': category,
-        'image': article.get('image', ''),
-        'date': article.get('date', time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())),
-        'tags': article.get('labels', [category]),
-        'source_url': article.get('original_url', '') or article.get('url', ''),
-        'discover': article.get('discover', False),
-    }
 
-    encoded = base64.b64encode(json.dumps(content, indent=2).encode()).decode()
-
-    payload = {
-        'message': f'add: {article["title"][:60]}',
-        'content': encoded,
-    }
-
-    for attempt in range(3):
-        try:
-            r = requests.put(
-                f'{GITHUB_API}/repos/{REPO}/contents/{path}',
-                headers=headers,
-                json=payload,
-                timeout=15,
-            )
-            if r.status_code in (200, 201):
-                url = f'https://scrollcorner.com/{category.lower()}/{slug}'
-                print(f'  ✅ Published: {article["title"][:55]}')
-                print(f'     {url}')
-                return {'slug': slug, 'url': url, 'category': category}
-            else:
-                print(f'  ❌ Failed ({r.status_code}): {r.text[:120]}')
-                if attempt < 2:
-                    time.sleep(5)
-        except Exception as e:
-            print(f'  ❌ Error: {e}')
-            if attempt < 2:
-                time.sleep(5)
-
-    return None
+def create_blob(content: str, headers: dict) -> str:
+    r = requests.post(
+        f'{GITHUB_API}/repos/{REPO}/git/blobs',
+        headers=headers,
+        json={'content': content, 'encoding': 'utf-8'},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()['sha']
 
 
 def publish_all(articles: list) -> tuple[list, list]:
     published, failed = [], []
+
     try:
         headers = get_headers()
     except ValueError as e:
@@ -106,14 +89,100 @@ def publish_all(articles: list) -> tuple[list, list]:
 
     print(f'🔑 GitHub token loaded — publishing to {REPO}')
 
+    # Get existing files to skip duplicates
+    print('🔍 Fetching existing articles...')
+    existing_paths = get_existing_slugs(headers)
+
+    # Prepare blobs for all new articles
+    tree_items = []
     for i, article in enumerate(articles):
-        print(f'Publishing {i+1}/{len(articles)}: {article["title"][:50]}...')
-        result = publish_post(article, headers)
-        if result:
-            published.append(result)
-        else:
+        slug = slugify(article['title'])
+        if not slug:
             failed.append(article)
-        time.sleep(1)
+            continue
+
+        category = article['category']
+        path = f'content/{category}/{slug}.json'
+
+        if path in existing_paths:
+            print(f'  ⏭️  Already exists: {slug}')
+            continue
+
+        content = {
+            'slug': slug,
+            'title': article['title'],
+            'body': article['body'],
+            'category': category,
+            'image': article.get('image', ''),
+            'image_source': article.get('image_source', ''),
+            'date': article.get('date', time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())),
+            'tags': article.get('labels', [category]),
+            'source_url': article.get('original_url', '') or article.get('url', ''),
+            'discover': article.get('discover', False),
+        }
+
+        try:
+            blob_sha = create_blob(json.dumps(content, indent=2), headers)
+            tree_items.append({
+                'path': path,
+                'mode': '100644',
+                'type': 'blob',
+                'sha': blob_sha,
+            })
+            url = f'https://scrollcorner.com/{category.lower()}/{slug}'
+            print(f'  ✅ Prepared: {article["title"][:55]}')
+            published.append({'slug': slug, 'url': url, 'category': category})
+        except Exception as e:
+            print(f'  ❌ Error preparing {slug}: {e}')
+            failed.append(article)
+
+    if not tree_items:
+        print('ℹ️  No new articles to publish.')
+        return published, failed
+
+    # Create tree, commit, and update ref in one shot
+    try:
+        print(f'\n📦 Committing {len(tree_items)} articles in a single deployment...')
+        latest_sha = get_latest_commit_sha(headers)
+        base_tree_sha = get_tree_sha(latest_sha, headers)
+
+        # Create new tree
+        r = requests.post(
+            f'{GITHUB_API}/repos/{REPO}/git/trees',
+            headers=headers,
+            json={'base_tree': base_tree_sha, 'tree': tree_items},
+            timeout=30,
+        )
+        r.raise_for_status()
+        new_tree_sha = r.json()['sha']
+
+        # Create commit
+        r = requests.post(
+            f'{GITHUB_API}/repos/{REPO}/git/commits',
+            headers=headers,
+            json={
+                'message': f'add: {len(tree_items)} articles',
+                'tree': new_tree_sha,
+                'parents': [latest_sha],
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        new_commit_sha = r.json()['sha']
+
+        # Update main branch ref
+        r = requests.patch(
+            f'{GITHUB_API}/repos/{REPO}/git/refs/heads/main',
+            headers=headers,
+            json={'sha': new_commit_sha},
+            timeout=15,
+        )
+        r.raise_for_status()
+        print(f'🚀 Published {len(tree_items)} articles in one commit!')
+
+    except Exception as e:
+        print(f'❌ Batch commit failed: {e}')
+        return [], articles
 
     print(f'\n📊 Summary: {len(published)} published, {len(failed)} failed')
     return published, failed
