@@ -6,6 +6,13 @@ import time
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
+# Create a persistent session with connection pooling
+SESSION = requests.Session()
+SESSION.headers.update({
+    'Authorization': f'Bearer {GROQ_API_KEY}',
+    'Content-Type': 'application/json'
+})
+
 def rewrite_article(article):
     """Rewrite a news article into an original piece using Groq API."""
     title = article['title']
@@ -36,11 +43,6 @@ Requirements:
 
 Write the article now:"""
 
-    headers = {
-        'Authorization': f'Bearer {GROQ_API_KEY}',
-        'Content-Type': 'application/json'
-    }
-
     payload = {
         'model': 'llama-3.3-70b-versatile',
         'messages': [
@@ -52,7 +54,8 @@ Write the article now:"""
 
     for attempt in range(3):
         try:
-            response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+            # Use pooled session instead of creating new connection
+            response = SESSION.post(GROQ_API_URL, json=payload, timeout=30)
             data = response.json()
             if 'choices' not in data:
                 raise ValueError(data.get('error', {}).get('message', 'No choices'))
@@ -63,7 +66,8 @@ Write the article now:"""
             payload['max_tokens'] = 50
 
             time.sleep(3)
-            title_response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=15)
+            # Use pooled session for title generation too
+            title_response = SESSION.post(GROQ_API_URL, json=payload, timeout=15)
             title_data = title_response.json()
             if 'choices' not in title_data:
                 raise ValueError(title_data.get('error', {}).get('message', 'No choices'))
@@ -94,3 +98,7 @@ def write_all_articles(raw_articles):
         else:
             print(f'  ❌ Failed')
     return written
+
+def cleanup_session():
+    """Close the session (call at pipeline end)."""
+    SESSION.close()
