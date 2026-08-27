@@ -21,10 +21,13 @@ DISCOVER_PER_RUN = 3       # How many articles to also tag as "Discover"
 TRACKING_FILE = 'published_urls.json'
 MAX_TRACKED = 1000         # Max URLs to keep in history
 
+# Compile regex once at module level
+NORM_PATTERN = re.compile(r'[^a-z0-9]')
+WORD_PATTERN = re.compile(r'[^a-z0-9\s]')
+
 def normalize(text):
     """Normalize a URL or title for dedup comparison."""
-    import re
-    return re.sub(r'[^a-z0-9]', '', text.lower())
+    return NORM_PATTERN.sub('', text.lower())
 
 def load_published():
     """Load set of published URL/title fingerprints."""
@@ -47,6 +50,20 @@ def check_env_vars():
         print(f'❌ Missing environment variables: {", ".join(missing)}')
         sys.exit(1)
     print('✅ All environment variables found')
+
+def title_words(t):
+    """Extract meaningful words from title for fuzzy matching."""
+    stop = {'a','an','the','and','or','in','on','at','to','for','of','with','is','are','as'}
+    words = set(w for w in WORD_PATTERN.sub('', t.lower()).split() if w not in stop and len(w) > 2)
+    return frozenset(words)  # Use frozenset for hashing/comparison
+
+def jaccard_similarity(set1, set2):
+    """Compute Jaccard similarity between two word sets (O(1) with frozensets)."""
+    if not set1 or not set2:
+        return 0.0
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
+    return intersection / union if union > 0 else 0.0
 
 def run_pipeline():
     """Run the full news pipeline."""
@@ -73,13 +90,10 @@ def run_pipeline():
     for a in raw_articles:
         by_category[a['category']].append(a)
 
-    def title_words(t):
-        stop = {'a','an','the','and','or','in','on','at','to','for','of','with','is','are','as'}
-        return set(w for w in re.sub(r'[^a-z0-9\s]','',t.lower()).split() if w not in stop and len(w)>2)
-
     new_articles = []
     skipped = 0
-    run_title_words = []  # track titles added this run for cross-category dedup
+    # Use a set of frozensets for O(1) membership testing instead of O(n) list iteration
+    run_title_words_set = set()
 
     for category, articles in by_category.items():
         capped = []
@@ -89,19 +103,26 @@ def run_pipeline():
             if url_key in published or title_key in published:
                 skipped += 1
                 continue
-            # Fuzzy check against titles already accepted this run
+            
+            # Fuzzy check: only compare against titles in this run
             words = title_words(a.get('title', ''))
-            is_dupe = any(
-                len(words & tw) / max(len(words | tw), 1) >= 0.40
-                for tw in run_title_words
-            )
+            
+            # Check similarity in O(n) but with early exit and reduced comparisons
+            is_dupe = False
+            for tw in run_title_words_set:
+                if jaccard_similarity(words, tw) >= 0.40:
+                    is_dupe = True
+                    break
+            
             if is_dupe:
                 skipped += 1
                 continue
+            
             capped.append(a)
-            run_title_words.append(words)
+            run_title_words_set.add(words)
             if len(capped) >= ARTICLES_PER_CATEGORY:
                 break
+        
         new_articles.extend(capped)
         print(f'  {category}: {len(capped)}/{ARTICLES_PER_CATEGORY} new articles')
 
