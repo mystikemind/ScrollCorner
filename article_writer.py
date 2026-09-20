@@ -42,7 +42,8 @@ Write the article now:"""
     }
 
     payload = {
-        'model': 'llama-3.3-70b-versatile',
+        'model': 'openai/gpt-oss-120b',
+        'reasoning_effort': 'low',
         'messages': [
             {'role': 'user', 'content': prompt}
         ],
@@ -60,7 +61,7 @@ Write the article now:"""
 
             title_prompt = f"Create a compelling, SEO-friendly news headline for an article about: {title}. Return ONLY the headline, nothing else. Max 15 words."
             payload['messages'] = [{'role': 'user', 'content': title_prompt}]
-            payload['max_tokens'] = 50
+            payload['max_tokens'] = 100
 
             time.sleep(3)
             title_response = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=15)
