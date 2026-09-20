@@ -22,7 +22,7 @@ def slugify(title: str) -> str:
 
 
 def get_headers():
-    token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GITHUB_PAT')
+    token = (os.environ.get('GITHUB_TOKEN') or os.environ.get('GITHUB_PAT') or '').strip()
     if not token:
         raise ValueError('GITHUB_TOKEN or GITHUB_PAT secret not set')
     return {
