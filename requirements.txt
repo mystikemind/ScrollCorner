@@ -1,7 +1,5 @@
+# ScrollCorner Automated News Pipeline
+# Production dependencies with pinned versions
+
 requests==2.31.0
-requests-oauthlib==1.3.1
-tweepy==4.14.0
-google-auth==2.23.0
-google-auth-oauthlib==1.1.0
-google-auth-httplib2==0.1.1
-google-api-python-client==2.100.0
+groq==0.4.2

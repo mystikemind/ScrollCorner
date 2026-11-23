@@ -1,13 +1,31 @@
+"""
+News Fetcher Module
+===================
+Fetches news articles from multiple sources (BBC RSS, NewsAPI) and filters by category.
+
+Features:
+- Multiple RSS feed sources for world news
+- NewsAPI fallback for additional coverage
+- Category-based keyword filtering
+- Image validation and fallback handling
+- Hotlinking protection for blocked domains
+"""
 import requests
 import os
 import re
 import xml.etree.ElementTree as ET
+from logging_config import setup_logger
+
+logger = setup_logger(__name__)
 
 def _kw_match(text, keyword):
     """Match keyword as whole word(s) in text, avoiding substring false positives."""
     return bool(re.search(r'\b' + re.escape(keyword) + r'\b', text))
 
 NEWSAPI_KEY = os.environ.get('NEWSAPI_KEY')
+
+# Create persistent session with connection pooling
+SESSION = requests.Session()
 
 # Fallback images (Unsplash) used only when source has no image or is from a blocked domain
 FALLBACK_IMAGES = {
@@ -152,7 +170,6 @@ CATEGORY_REJECT = {
 }
 
 # Strong tech title signals — if ANY of these appear in the article TITLE, reject from World-News
-# These are unambiguous product/tech release markers that Al Jazeera's all.xml leaks into world feeds
 TECH_TITLE_SIGNALS = [
     'ios ', 'tvos', 'ipados', 'watchos', 'macos', 'visionos',
     'iphone', 'ipad', 'apple watch', 'apple tv', 'apple vision',
@@ -172,7 +189,6 @@ def _matches_category(article, category):
     if any(_kw_match(text, kw) for kw in CATEGORY_REJECT.get(category, [])):
         return False
     # For World-News: also reject if the title has clear tech product/release signals
-    # (Al Jazeera all.xml leaks iOS/tvOS/Android release articles into world feeds)
     if category == 'World-News':
         if any(sig in title for sig in TECH_TITLE_SIGNALS):
             return False
@@ -182,7 +198,8 @@ def _matches_category(article, category):
 def _parse_rss(feed_url, category, count=12):
     """Parse a single RSS feed and return articles."""
     try:
-        r = requests.get(feed_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        r = SESSION.get(feed_url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        r.raise_for_status()
         root = ET.fromstring(r.content)
         ns = {'media': 'http://search.yahoo.com/mrss/'}
         source_name = root.findtext('.//channel/title') or feed_url.split('/')[2]
@@ -205,14 +222,14 @@ def _parse_rss(feed_url, category, count=12):
                 raw_image = enclosure.get('url', '')
             else:
                 raw_image = ''
-            # Skip BBC branded/watermark images (ace/ = InDepth, branded_news/ = BBC News logo)
+            # Skip BBC branded/watermark images
             if 'ichef.bbci.co.uk/ace/' in raw_image or '/branded_news/' in raw_image:
                 continue
             # Skip articles with no real image
             if not raw_image:
                 continue
             image = _safe_image(raw_image, category)
-            # Skip if image resolved to Unsplash fallback (blocked domain etc.)
+            # Skip if image resolved to Unsplash fallback
             if 'unsplash' in image:
                 continue
             articles.append({
@@ -224,12 +241,20 @@ def _parse_rss(feed_url, category, count=12):
             })
             if len(articles) >= count:
                 break
+        logger.debug(f'Parsed {len(articles)} articles from {source_name}')
         return articles
+    except requests.RequestException as e:
+        logger.warning(f'RSS fetch error {feed_url[:40]}: {type(e).__name__}: {e}')
+        return []
+    except ET.ParseError as e:
+        logger.warning(f'RSS parse error {feed_url[:40]}: {e}')
+        return []
     except Exception as e:
-        print(f'  RSS error {feed_url[:40]}: {e}')
+        logger.error(f'Unexpected error parsing RSS {feed_url[:40]}: {e}')
         return []
 
 def fetch_from_rss(category, count=12):
+    """Fetch articles from RSS feeds for a category."""
     if category == 'World-News':
         articles = []
         seen = set()
@@ -242,18 +267,22 @@ def fetch_from_rss(category, count=12):
         return articles
     feed_url = RSS_FEEDS.get(category)
     if not feed_url:
+        logger.warning(f'No RSS feed configured for {category}')
         return []
     return _parse_rss(feed_url, category, count)
 
 def fetch_from_newsapi(category, count=12):
+    """Fetch articles from NewsAPI for a category."""
     if not NEWSAPI_KEY:
+        logger.debug('NEWSAPI_KEY not set, skipping NewsAPI fetch')
         return []
     try:
-        r = requests.get('https://newsapi.org/v2/top-headlines', params={
+        r = SESSION.get('https://newsapi.org/v2/top-headlines', params={
             'apiKey': NEWSAPI_KEY,
             'category': NEWSAPI_CATEGORY_MAP.get(category, 'general'),
             'language': 'en', 'pageSize': count
         }, timeout=10)
+        r.raise_for_status()
         articles = []
         for a in r.json().get('articles', []):
             if not (a.get('title') and a.get('description') and a.get('urlToImage')):
@@ -270,9 +299,13 @@ def fetch_from_newsapi(category, count=12):
                 'image_source': a.get('source', {}).get('name', ''),
                 'category': category
             })
+        logger.debug(f'Fetched {len(articles)} articles from NewsAPI ({category})')
         return articles
+    except requests.RequestException as e:
+        logger.warning(f'NewsAPI error {category}: {type(e).__name__}: {e}')
+        return []
     except Exception as e:
-        print(f'  NewsAPI error {category}: {e}')
+        logger.error(f'Unexpected error fetching NewsAPI {category}: {e}')
         return []
 
 def fetch_articles(category, count=3):
@@ -290,16 +323,23 @@ def fetch_articles(category, count=3):
         seen_urls.add(a['url'])
         pool.append(a)
     if rejected:
-        print(f'  Rejected {rejected} off-category articles from {category}')
+        logger.info(f'Rejected {rejected} off-category articles from {category}')
     return pool
 
 ALL_CATEGORIES = ['World-News', 'Technology', 'Finance', 'Science', 'Entertainment', 'Sports']
 
 def fetch_all_categories(articles_per_category=3):
+    """Fetch articles from all categories."""
     all_articles = []
     for category in ALL_CATEGORIES:
-        print(f'Fetching {category}...')
+        logger.info(f'Fetching {category}...')
         articles = fetch_articles(category, articles_per_category)
         all_articles.extend(articles)
-        print(f'  Got {len(articles)} articles')
+        logger.info(f'  Got {len(articles)} articles from {category}')
+    logger.info(f'Total articles fetched: {len(all_articles)}')
     return all_articles
+
+def cleanup_session():
+    """Close the session (call at pipeline end)."""
+    SESSION.close()
+    logger.debug('News fetcher session closed')
