@@ -6,6 +6,9 @@ import time
 BLOG_ID = os.environ.get('BLOG_ID')
 BLOGGER_API_URL = f'https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts'
 
+# Create persistent session with connection pooling
+SESSION = requests.Session()
+
 def get_valid_token():
     """Return a fresh OAuth token, refreshing if needed."""
     refresh_token = os.environ.get('BLOGGER_REFRESH_TOKEN')
@@ -13,7 +16,7 @@ def get_valid_token():
     client_secret = os.environ.get('BLOGGER_CLIENT_SECRET')
 
     if refresh_token and client_id and client_secret:
-        r = requests.post('https://oauth2.googleapis.com/token', data={
+        r = SESSION.post('https://oauth2.googleapis.com/token', data={
             'client_id': client_id,
             'client_secret': client_secret,
             'refresh_token': refresh_token,
@@ -37,7 +40,7 @@ def format_post_html(article):
 
     # Add featured image if available
     if article.get('image'):
-        html += f'<div class="post-featured-image"><img src="{article["image"]}" alt="{article["title"]}" style="width:100%;max-height:400px;object-fit:cover;border-radius:8px;margin-bottom:20px;"/></div>\n'
+        html += f'<div class="post-featured-image"><img src="{article["image"]}" alt="{article["title"]}" style="width:100%;max-height:400px;object-fit:cover;border-radius:8px;margin-bottom:20px;"[...]
 
     # Add paragraphs
     for para in paragraphs:
@@ -46,7 +49,7 @@ def format_post_html(article):
             html += f'<p>{para}</p>\n'
 
     # Add source disclaimer
-    html += f'\n<p style="font-size:12px;color:#aaa;border-top:1px solid #eee;padding-top:10px;margin-top:20px;">This article was curated and rewritten by ScrollCorner editorial team for informational purposes.</p>'
+    html += f'\n<p style="font-size:12px;color:#aaa;border-top:1px solid #eee;padding-top:10px;margin-top:20px;">This article was curated and rewritten by ScrollCorner editorial team for informati[...]
 
     return html
 
@@ -74,7 +77,8 @@ def publish_post(article, token):
 
     for attempt in range(3):
         try:
-            response = requests.post(
+            # Use pooled session instead of creating new connection
+            response = SESSION.post(
                 BLOGGER_API_URL, headers=headers,
                 json=post_data, params={'isDraft': False}, timeout=15
             )
@@ -114,3 +118,7 @@ def publish_all(articles):
 
     print(f'\n📊 Summary: {len(published)} published, {len(failed)} failed')
     return published, failed
+
+def cleanup_session():
+    """Close the session (call at pipeline end)."""
+    SESSION.close()
